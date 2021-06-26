@@ -1,3 +1,3 @@
-module github.com/pandulaDW/go-distributed-service
+module go-microservices
 
 go 1.13
