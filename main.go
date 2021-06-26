@@ -1,7 +1,11 @@
 package main
 
-import "fmt"
+import (
+	"go-microservices/server"
+	"log"
+)
 
 func main() {
-	fmt.Println("Hello, Go!!")
+	srv := server.NewHTTPServer(":8080")
+	log.Fatal(srv.ListenAndServe())
 }
