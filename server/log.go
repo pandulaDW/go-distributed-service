@@ -17,6 +17,7 @@ type Log struct {
 	records []Record
 }
 
+// NewLog is a constructor for Log
 func NewLog() *Log {
 	return &Log{}
 }

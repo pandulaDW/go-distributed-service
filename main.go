@@ -11,10 +11,7 @@ func main() {
 	blocker := make(chan struct{})
 
 	go func() {
-		err := srv.ListenAndServe()
-		if err != nil {
-			log.Fatal(err)
-		}
+		log.Fatal(srv.ListenAndServe())
 	}()
 
 	fmt.Println("server started...")
