@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"go-microservices/server"
+	"github.com/pandulaDW/go-distributed-service/server"
 	"log"
 )
 
