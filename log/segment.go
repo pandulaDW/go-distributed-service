@@ -3,6 +3,7 @@ package log
 import (
 	"fmt"
 	api "github.com/pandulaDW/go-distributed-service/api/v1"
+	"google.golang.org/protobuf/proto"
 	"os"
 	"path"
 )
@@ -54,6 +55,44 @@ func newSegment(dir string, baseOffset uint64, c Config) (*segment, error) {
 	return s, nil
 }
 
-func (s *segment) Append(record *api.Record) {
+func (s *segment) Append(record *api.Record) (offset uint64, err error) {
+	cur := s.nextOffset
+	record.Offset = cur
 
+	// marshal the record and get raw bytes
+	p, err := proto.Marshal(record)
+	if err != nil {
+		return 0, err
+	}
+
+	// append to the store
+	_, pos, err := s.store.Append(p)
+	if err != nil {
+		return 0, err
+	}
+
+	// append to the index (index offsets are relative to base offset)
+	err = s.index.Write(uint32(s.nextOffset-s.baseOffset), pos)
+	if err != nil {
+		return 0, err
+	}
+
+	s.nextOffset++
+	return cur, nil
+}
+
+func (s *segment) Read(off uint64) (*api.Record, error) {
+	_, pos, err := s.index.Read(int64(off - s.baseOffset))
+	if err != nil {
+		return nil, err
+	}
+
+	p, err := s.store.Read(pos)
+	if err != nil {
+		return nil, err
+	}
+
+	record := &api.Record{}
+	err = proto.Unmarshal(p, record)
+	return record, err
 }
