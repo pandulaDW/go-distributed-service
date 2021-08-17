@@ -46,7 +46,8 @@ func newSegment(dir string, baseOffset uint64, c Config) (*segment, error) {
 	}
 
 	// update the nextOffset
-	if off, _, err := s.index.Read(-1); err != nil {
+	var off uint32
+	if off, _, err = s.index.Read(-1); err != nil {
 		s.nextOffset = baseOffset
 	} else {
 		s.nextOffset = baseOffset + uint64(off) + 1
@@ -113,15 +114,12 @@ func (s *segment) Remove() error {
 	if err := s.Close(); err != nil {
 		return err
 	}
-
 	if err := os.Remove(s.index.Name()); err != nil {
 		return err
 	}
-
 	if err := os.Remove(s.store.Name()); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -129,11 +127,9 @@ func (s *segment) Close() error {
 	if err := s.index.Close(); err != nil {
 		return err
 	}
-
 	if err := s.store.Close(); err != nil {
 		return err
 	}
-
 	return nil
 }
 
