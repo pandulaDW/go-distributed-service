@@ -3,6 +3,7 @@ package log
 import (
 	"fmt"
 	api "github.com/pandulaDW/go-distributed-service/api/v1"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -158,4 +159,70 @@ func (l *Log) Reset() error {
 	}
 
 	return l.setup()
+}
+
+// LowestOffset returns the lowest offset
+func (l *Log) LowestOffset() (uint64, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.segments[0].baseOffset, nil
+}
+
+// HighestOffset returns the current highest offset
+func (l *Log) HighestOffset() (uint64, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	off := l.segments[len(l.segments)-1].nextOffset
+	if off == 0 {
+		return 0, nil
+	}
+	return off - 1, nil
+}
+
+// Truncate removes all segments whose highest offset is lower than lowest
+func (l *Log) Truncate(lowest uint64) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	var segments []*segment
+
+	for _, s := range l.segments {
+		if s.nextOffset <= lowest+1 {
+			if err := s.Remove(); err != nil {
+				return err
+			}
+			continue
+		}
+		segments = append(segments, s)
+	}
+
+	return nil
+}
+
+type originReader struct {
+	*store
+	off int64
+}
+
+func (o *originReader) Read(p []byte) (int, error) {
+	n, err := o.ReadAt(p, o.off)
+	o.off += int64(n)
+	return n, err
+}
+
+// Reader returns an io.Reader to read the whole log.
+//
+// We’ll need this capability when we implement coordinate consensus
+// and need to support snapshots and restoring a log
+func (l *Log) Reader() io.Reader {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	readers := make([]io.Reader, len(l.segments))
+
+	for i, s := range l.segments {
+		readers[i] = &originReader{s.store, 0}
+	}
+
+	return io.MultiReader(readers...)
 }
