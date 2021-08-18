@@ -1,7 +1,10 @@
 package log
 
 import (
+	"fmt"
+	api "github.com/pandulaDW/go-distributed-service/api/v1"
 	"io/ioutil"
+	"os"
 	"path"
 	"sort"
 	"strconv"
@@ -87,4 +90,72 @@ func (l *Log) setup() error {
 	}
 
 	return nil
+}
+
+// Append appends a record to the log
+func (l *Log) Append(record *api.Record) (uint64, error) {
+	l.mu.Lock() // lock for writing
+	defer l.mu.Unlock()
+
+	off, err := l.activeSegment.Append(record)
+	if err != nil {
+		return 0, err
+	}
+
+	if l.activeSegment.IsMaxed() {
+		err = l.newSegment(off + 1)
+	}
+
+	return off, err
+}
+
+// Read reads the record stored at the given offset.
+func (l *Log) Read(off uint64) (*api.Record, error) {
+	l.mu.RLock() // lock for reading
+	defer l.mu.RUnlock()
+
+	var s *segment
+	for _, curSegment := range l.segments {
+		if curSegment.baseOffset <= off && off < curSegment.nextOffset {
+			s = curSegment
+			break
+		}
+	}
+
+	if s == nil || s.nextOffset <= off {
+		return nil, fmt.Errorf("offset out of range: %d", off)
+	}
+
+	return s.Read(off)
+}
+
+// Close iterates over the segments and closes them
+func (l *Log) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	for _, s := range l.segments {
+		if err := s.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Remove closes the log and then removes its data
+func (l *Log) Remove() error {
+	if err := l.Close(); err != nil {
+		return err
+	}
+
+	return os.RemoveAll(l.Dir)
+}
+
+// Reset removes the log and then creates a new log to replace it
+func (l *Log) Reset() error {
+	if err := l.Remove(); err != nil {
+		return err
+	}
+
+	return l.setup()
 }
