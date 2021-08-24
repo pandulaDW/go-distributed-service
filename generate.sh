@@ -1,0 +1,1 @@
+protoc --go_out=. --go-grpc_out=. api/v1/log.proto
