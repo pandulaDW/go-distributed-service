@@ -32,6 +32,6 @@ GET http://localhost:8080/
 Content-Type: application/json
 
 {
-  "offset": 2
+  "offset": 0
 }
 
