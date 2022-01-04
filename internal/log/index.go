@@ -2,17 +2,17 @@ package log
 
 import (
 	"github.com/tysonmote/gommap"
+	"io"
 	"os"
 )
 
 // The *Width constants define the number of bytes that make up each index entry.
 var (
-	// record offset
+	// index entry offset. 0 is always the offset of the index’s first entry, 1 is the second entry, and so on
 	offWidth uint64 = 4
 	// record's position in the store file
 	posWidth uint64 = 8
-	// given offset of a record, the position in the store file is
-	// offWidth x offset + posWidth x offset = offset x entWidth
+	// an offset of a record would contain 4+8=12 bytes to represent in the index file
 	entWidth = offWidth + posWidth
 )
 
@@ -64,4 +64,45 @@ func (i *index) Close() error {
 		return err
 	}
 	return i.file.Close()
+}
+
+// Write appends the given offset and position to the index
+func (i *index) Write(off uint32, pos uint64) error {
+	if uint64(len(i.mmap)) < i.size+entWidth {
+		return io.EOF
+	}
+
+	enc.PutUint32(i.mmap[i.size:i.size+offWidth], off)
+	enc.PutUint64(i.mmap[i.size+offWidth:i.size+entWidth], pos)
+
+	i.size += entWidth
+
+	return nil
+}
+
+// Read takes in an offset and returns the associated record’s position in the store
+func (i *index) Read(in int64) (out uint32, pos uint64, err error) {
+	if i.size == 0 {
+		return 0, 0, nil
+	}
+	if in == -1 {
+		out = uint32((i.size / entWidth) - 1)
+	} else {
+		out = uint32(in)
+	}
+
+	pos = uint64(out) * entWidth
+	if i.size < pos+entWidth {
+		return 0, 0, io.EOF
+	}
+
+	out = enc.Uint32(i.mmap[pos : pos+offWidth])
+	pos = enc.Uint64(i.mmap[pos+offWidth : pos+entWidth])
+
+	return out, pos, nil
+}
+
+// Name returns the index file's path
+func (i *index) Name() string {
+	return i.file.Name()
 }
