@@ -83,7 +83,7 @@ func (i *index) Write(off uint32, pos uint64) error {
 // Read takes in an offset and returns the associated record’s position in the store
 func (i *index) Read(in int64) (out uint32, pos uint64, err error) {
 	if i.size == 0 {
-		return 0, 0, nil
+		return 0, 0, io.EOF
 	}
 	if in == -1 {
 		out = uint32((i.size / entWidth) - 1)
