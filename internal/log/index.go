@@ -8,7 +8,7 @@ import (
 
 // The *Width constants define the number of bytes that make up each index entry.
 var (
-	// index entry offset. 0 is always the offset of the index’s first entry, 1 is the second entry, and so on
+	// index entry offset. 0 is always the offset of the index file's first entry, 1 is the second entry, and so on
 	offWidth uint64 = 4
 	// record's position in the store file
 	posWidth uint64 = 8

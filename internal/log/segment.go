@@ -92,7 +92,7 @@ func (s *segment) Read(off uint64) (*api.Record, error) {
 		return nil, err
 	}
 
-	var record *api.Record
+	record := &api.Record{}
 	err = proto.Unmarshal(read, record)
 	return record, err
 }
@@ -114,7 +114,7 @@ func (s *segment) Close() error {
 
 // Remove closes the segment and removes the index and store files
 func (s *segment) Remove() error {
-	if err := s.Close(); s != nil {
+	if err := s.Close(); err != nil {
 		return err
 	}
 	if err := os.Remove(s.index.Name()); err != nil {
