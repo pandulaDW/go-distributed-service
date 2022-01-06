@@ -3,7 +3,8 @@
 A distributed commit log library built using Go, protobufs and gRPC. The code was written by following the book [distributed services with go](https://pragprog.com/titles/tjgo/distributed-services-with-go).  
 
 ## The Log Library
-- Log library consists of several abstractions. At the lowest level, the logs are persisted in files (store file) using a binary format.
+- Logs are written as binary data after serializing using protobuf format. 
+- The Log library consists of several abstractions. At the lowest level, the logs are persisted in files (store file) using a binary format.
 - Index files are created where an index entry is created for each log added. The index files are memory-mapped for fast reading.
 - Each store and index file combination is wrapped in a Segment, where old segments are deleted and an active segment is maintained for writing.
 - A primary abstraction called Log is maintained around the segments.
