@@ -2,38 +2,49 @@ package main
 
 import (
 	"fmt"
-	"github.com/pandulaDW/go-distributed-service/server"
-	"net/http"
+	api "github.com/pandulaDW/go-distributed-service/api/v1"
+	"github.com/pandulaDW/go-distributed-service/internal/log"
+	"github.com/pandulaDW/go-distributed-service/internal/server"
+	"google.golang.org/grpc"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 )
 
 func main() {
-	httpServer := server.NewHTTPServer(":8080")
-	isServerRunning := make(chan bool)
+	listener, _ := net.Listen("tcp", ":50001")
 
+	isServerRunning := make(chan bool)
 	sig := make(chan os.Signal)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
 
+	l, err := log.NewLog("data", log.Config{})
+	if err != nil {
+		fmt.Println("error creating the log: ", err)
+		os.Exit(1)
+	}
+
+	c := &server.Config{CommitLog: l}
+	grpcServer, _ := server.NewgrpcServer(c)
+
+	s := grpc.NewServer()
+	api.RegisterLogServer(s, grpcServer)
+
 	go func() {
 		<-sig
-		err := httpServer.Close()
-		if err != nil {
-			fmt.Println("error closing the server: ", err)
-		}
+		fmt.Println("Gracefully shutting down the server...")
+		s.GracefulStop()
 	}()
 
 	go func() {
 		defer func() {
 			isServerRunning <- false
 		}()
-		fmt.Println("server listening to requests at port 8080...")
-		err := httpServer.ListenAndServe()
-		if err != http.ErrServerClosed && err != nil {
-			fmt.Println("server unexpectedly closed: ", err)
-		} else {
-			fmt.Println("closed the server successfully...")
+		fmt.Println("server listening to requests at port 50001...")
+		err = s.Serve(listener)
+		if err != nil {
+			fmt.Println(err)
 		}
 	}()
 

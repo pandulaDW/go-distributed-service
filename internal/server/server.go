@@ -19,8 +19,8 @@ type grpcServer struct {
 	*Config
 }
 
-// newgrpcServer creates a new gRPC server
-func newgrpcServer(config *Config) (srv *grpcServer, err error) {
+// NewgrpcServer creates a new gRPC server
+func NewgrpcServer(config *Config) (srv *grpcServer, err error) {
 	srv = &grpcServer{Config: config}
 	return srv, nil
 }
