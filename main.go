@@ -2,10 +2,8 @@ package main
 
 import (
 	"fmt"
-	api "github.com/pandulaDW/go-distributed-service/api/v1"
 	"github.com/pandulaDW/go-distributed-service/internal/log"
 	"github.com/pandulaDW/go-distributed-service/internal/server"
-	"google.golang.org/grpc"
 	"net"
 	"os"
 	"os/signal"
@@ -13,9 +11,9 @@ import (
 )
 
 func main() {
-	listener, _ := net.Listen("tcp", ":50001")
+	listener, _ := net.Listen("tcp", ":50051")
+	isServerClosed := make(chan bool)
 
-	isServerRunning := make(chan bool)
 	sig := make(chan os.Signal)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
 
@@ -26,29 +24,33 @@ func main() {
 	}
 
 	c := &server.Config{CommitLog: l}
-	grpcServer, _ := server.NewgrpcServer(c)
-
-	s := grpc.NewServer()
-	api.RegisterLogServer(s, grpcServer)
+	s, _ := server.NewGRPCServer(c)
 
 	go func() {
 		<-sig
+
 		fmt.Println("Gracefully shutting down the server...")
 		s.GracefulStop()
+		_ = listener.Close()
+
+		fmt.Println("Closing the Log...")
+		err = l.Close()
+		if err != nil {
+			fmt.Println("error closing the log: ", err)
+		}
+
+		isServerClosed <- true
 	}()
 
 	go func() {
-		defer func() {
-			isServerRunning <- false
-		}()
-		fmt.Println("server listening to requests at port 50001...")
+		fmt.Println("server listening to requests at port 50051...")
 		err = s.Serve(listener)
 		if err != nil {
 			fmt.Println(err)
 		}
 	}()
 
-	<-isServerRunning
+	<-isServerClosed
 	fmt.Println("exiting the process...")
 	os.Exit(1)
 }

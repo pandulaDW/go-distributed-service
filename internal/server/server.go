@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	api "github.com/pandulaDW/go-distributed-service/api/v1"
+	"google.golang.org/grpc"
 )
 
 type CommitLog interface {
@@ -19,8 +20,20 @@ type grpcServer struct {
 	*Config
 }
 
-// NewgrpcServer creates a new gRPC server
-func NewgrpcServer(config *Config) (srv *grpcServer, err error) {
+// NewGRPCServer instantiate the log service, create a gRPC server, and register the
+// service to that server
+func NewGRPCServer(config *Config) (*grpc.Server, error) {
+	gsrv := grpc.NewServer()
+	srv, err := newgrpcServer(config)
+	if err != nil {
+		return nil, err
+	}
+	api.RegisterLogServer(gsrv, srv)
+	return gsrv, nil
+}
+
+// newgrpcServer creates a new server instance
+func newgrpcServer(config *Config) (srv *grpcServer, err error) {
 	srv = &grpcServer{Config: config}
 	return srv, nil
 }
