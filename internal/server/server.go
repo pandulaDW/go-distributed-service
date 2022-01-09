@@ -23,8 +23,8 @@ type grpcServer struct {
 
 // NewGRPCServer instantiate the log service, create a gRPC server, and register the
 // service to that server
-func NewGRPCServer(config *Config) (*grpc.Server, error) {
-	gsrv := grpc.NewServer()
+func NewGRPCServer(config *Config, opts ...grpc.ServerOption) (*grpc.Server, error) {
+	gsrv := grpc.NewServer(opts...)
 	srv, err := newgrpcServer(config)
 	if err != nil {
 		return nil, err
@@ -105,7 +105,7 @@ func (srv *grpcServer) ConsumeStream(req *api.ConsumeRequest, stream api.Log_Con
 }
 
 // ProduceBulkRecords implements a streaming RPC for client to bulk insert records to reduce the number
-// of connections maintained in when inserting a large number of records at once.
+// of connections maintained when inserting a large number of records at once.
 func (srv *grpcServer) ProduceBulkRecords(stream api.Log_ProduceBulkRecordsServer) error {
 	insertCount := uint64(0)
 
@@ -130,6 +130,5 @@ loop:
 		}
 	}
 
-	err := stream.SendAndClose(&api.ProduceBulkResponse{NumRecordsInserted: insertCount})
-	return err
+	return stream.SendAndClose(&api.ProduceBulkResponse{NumRecordsInserted: insertCount})
 }

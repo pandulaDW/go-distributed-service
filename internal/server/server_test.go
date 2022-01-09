@@ -3,9 +3,11 @@ package server
 import (
 	"context"
 	api "github.com/pandulaDW/go-distributed-service/api/v1"
+	tlsConfig "github.com/pandulaDW/go-distributed-service/internal/config"
 	"github.com/pandulaDW/go-distributed-service/internal/log"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 	"io/ioutil"
 	"net"
@@ -17,6 +19,7 @@ func TestServer(t *testing.T) {
 		"produce/consume a message to/from the log succeeds": testProduceConsume,
 		"consume past log boundary fail":                     testConsumePastBoundary,
 		"produce/consume stream succeeds":                    testProduceConsumeStream,
+		"produce bulk records":                               testProduceBulkRecords,
 	} {
 		t.Run(scenario, func(t *testing.T) {
 			client, cfg, teardown := setupTest(t, nil)
@@ -29,12 +32,31 @@ func TestServer(t *testing.T) {
 func setupTest(t *testing.T, fn func(config *Config)) (client api.LogClient, cfg *Config, teardown func()) {
 	t.Helper()
 
-	l, err := net.Listen("tcp", ":0") // 0 will automatically assign a free port
+	l, err := net.Listen("tcp", "127.0.0.1:0") // 0 will automatically assign a free port
 	require.NoError(t, err)
 
-	clientOptions := []grpc.DialOption{grpc.WithInsecure()}
+	// Configure client’s TLS credentials to use the CA as the client’s Root CA
+	// The CA it will use to verify the server as well.
+	clientTLSConfig, err := tlsConfig.SetupTLSConfig(tlsConfig.TLSConfig{CAFile: tlsConfig.CAFile})
+	require.NoError(t, err)
+
+	// Tell the client to use those credentials for its connection
+	clientCreds := credentials.NewTLS(clientTLSConfig)
+	//clientOptions := []grpc.DialOption{grpc.WithTransportCredentials(clientCreds)}
+	clientOptions := []grpc.DialOption{grpc.WithTransportCredentials(clientCreds)}
+
 	conn, err := grpc.Dial(l.Addr().String(), clientOptions...)
 	require.NoError(t, err)
+
+	// Configure server's TLS config
+	serverTLSConfig, err := tlsConfig.SetupTLSConfig(tlsConfig.TLSConfig{
+		CertFile:      tlsConfig.ServerCertFile,
+		KeyFile:       tlsConfig.ServerKeyFile,
+		CAFile:        tlsConfig.CAFile,
+		ServerAddress: l.Addr().String(),
+	})
+	require.NoError(t, err)
+	serverCreds := credentials.NewTLS(serverTLSConfig)
 
 	dir, err := ioutil.TempDir("", "server-test")
 	require.NoError(t, err)
@@ -47,7 +69,7 @@ func setupTest(t *testing.T, fn func(config *Config)) (client api.LogClient, cfg
 		fn(cfg)
 	}
 
-	server, err := NewGRPCServer(cfg)
+	server, err := NewGRPCServer(cfg, grpc.Creds(serverCreds))
 	require.NoError(t, err)
 
 	go func() {
@@ -132,4 +154,24 @@ func testProduceConsumeStream(t *testing.T, client api.LogClient, _ *Config) {
 			require.Equal(t, res.Record, &api.Record{Offset: uint64(i), Value: record.Value})
 		}
 	}
+}
+
+func testProduceBulkRecords(t *testing.T, client api.LogClient, _ *Config) {
+	ctx := context.Background()
+	records := []*api.Record{
+		{Value: []byte("first message"), Offset: 0},
+		{Value: []byte("second message"), Offset: 1},
+	}
+
+	stream, err := client.ProduceBulkRecords(ctx)
+	require.NoError(t, err)
+
+	for _, record := range records {
+		err = stream.Send(&api.ProduceRequest{Record: record})
+		require.NoError(t, err)
+	}
+
+	res, err := stream.CloseAndRecv()
+	require.NoError(t, err)
+	require.Equal(t, uint64(len(records)), res.NumRecordsInserted)
 }
