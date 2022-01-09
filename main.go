@@ -17,7 +17,11 @@ func main() {
 	sig := make(chan os.Signal)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
 
-	l, err := log.NewLog("data", log.Config{})
+	lConfig := log.Config{}
+	lConfig.Segment.MaxStoreBytes = 90000
+	lConfig.Segment.MaxIndexBytes = 9000
+
+	l, err := log.NewLog("data", lConfig)
 	if err != nil {
 		fmt.Println("error creating the log: ", err)
 		os.Exit(1)

@@ -9,6 +9,16 @@ A distributed commit log library built using Go, protobufs and gRPC. The code wa
 - Each store and index file combination is wrapped in a Segment, where old segments are deleted and an active segment is maintained for writing.
 - A primary abstraction called Log is maintained around the segments.
 
+## Networking
+- gRPC is used for handling rpc calls between the internal services.
+- The application includes 4 different types of handlers.
+  - Produce handler for producing a log.
+  - Consume handler for consuming a log.
+  - Server side streaming handler to read all logs after a given offset.
+  - Bidirectional streaming handler so the client can stream data into the server’s
+    log and produce and consume logs in any desired pattern quickly.
+  - A bulk stream request handler to insert large number of records quickly with less network calls.  
+
 ## Features of the service
 - The connections are made secure by authenticating the server with SSL/TLS  and by authenticating requests with access tokens.
 - The service has been made observable by adding logs, metrics, and tracing.

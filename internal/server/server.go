@@ -4,6 +4,7 @@ import (
 	"context"
 	api "github.com/pandulaDW/go-distributed-service/api/v1"
 	"google.golang.org/grpc"
+	"io"
 )
 
 type CommitLog interface {
@@ -101,4 +102,34 @@ func (srv *grpcServer) ConsumeStream(req *api.ConsumeRequest, stream api.Log_Con
 			req.Offset++
 		}
 	}
+}
+
+// ProduceBulkRecords implements a streaming RPC for client to bulk insert records to reduce the number
+// of connections maintained in when inserting a large number of records at once.
+func (srv *grpcServer) ProduceBulkRecords(stream api.Log_ProduceBulkRecordsServer) error {
+	insertCount := uint64(0)
+
+loop:
+	for {
+		select {
+		case <-stream.Context().Done():
+			break loop
+		default:
+			req, err := stream.Recv()
+			if err == io.EOF {
+				break loop
+			}
+			if err != nil {
+				return err
+			}
+			_, err = srv.CommitLog.Append(req.Record)
+			if err != nil {
+				return err
+			}
+			insertCount++
+		}
+	}
+
+	err := stream.SendAndClose(&api.ProduceBulkResponse{NumRecordsInserted: insertCount})
+	return err
 }

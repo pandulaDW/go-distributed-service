@@ -21,6 +21,7 @@ type LogClient interface {
 	Consume(ctx context.Context, in *ConsumeRequest, opts ...grpc.CallOption) (*ConsumeResponse, error)
 	ConsumeStream(ctx context.Context, in *ConsumeRequest, opts ...grpc.CallOption) (Log_ConsumeStreamClient, error)
 	ProduceStream(ctx context.Context, opts ...grpc.CallOption) (Log_ProduceStreamClient, error)
+	ProduceBulkRecords(ctx context.Context, opts ...grpc.CallOption) (Log_ProduceBulkRecordsClient, error)
 }
 
 type logClient struct {
@@ -112,6 +113,40 @@ func (x *logProduceStreamClient) Recv() (*ProduceResponse, error) {
 	return m, nil
 }
 
+func (c *logClient) ProduceBulkRecords(ctx context.Context, opts ...grpc.CallOption) (Log_ProduceBulkRecordsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Log_serviceDesc.Streams[2], "/Log/ProduceBulkRecords", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &logProduceBulkRecordsClient{stream}
+	return x, nil
+}
+
+type Log_ProduceBulkRecordsClient interface {
+	Send(*ProduceRequest) error
+	CloseAndRecv() (*ProduceBulkResponse, error)
+	grpc.ClientStream
+}
+
+type logProduceBulkRecordsClient struct {
+	grpc.ClientStream
+}
+
+func (x *logProduceBulkRecordsClient) Send(m *ProduceRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *logProduceBulkRecordsClient) CloseAndRecv() (*ProduceBulkResponse, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(ProduceBulkResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // LogServer is the server API for Log service.
 // All implementations must embed UnimplementedLogServer
 // for forward compatibility
@@ -120,6 +155,7 @@ type LogServer interface {
 	Consume(context.Context, *ConsumeRequest) (*ConsumeResponse, error)
 	ConsumeStream(*ConsumeRequest, Log_ConsumeStreamServer) error
 	ProduceStream(Log_ProduceStreamServer) error
+	ProduceBulkRecords(Log_ProduceBulkRecordsServer) error
 	mustEmbedUnimplementedLogServer()
 }
 
@@ -138,6 +174,9 @@ func (UnimplementedLogServer) ConsumeStream(*ConsumeRequest, Log_ConsumeStreamSe
 }
 func (UnimplementedLogServer) ProduceStream(Log_ProduceStreamServer) error {
 	return status.Errorf(codes.Unimplemented, "method ProduceStream not implemented")
+}
+func (UnimplementedLogServer) ProduceBulkRecords(Log_ProduceBulkRecordsServer) error {
+	return status.Errorf(codes.Unimplemented, "method ProduceBulkRecords not implemented")
 }
 func (UnimplementedLogServer) mustEmbedUnimplementedLogServer() {}
 
@@ -235,6 +274,32 @@ func (x *logProduceStreamServer) Recv() (*ProduceRequest, error) {
 	return m, nil
 }
 
+func _Log_ProduceBulkRecords_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(LogServer).ProduceBulkRecords(&logProduceBulkRecordsServer{stream})
+}
+
+type Log_ProduceBulkRecordsServer interface {
+	SendAndClose(*ProduceBulkResponse) error
+	Recv() (*ProduceRequest, error)
+	grpc.ServerStream
+}
+
+type logProduceBulkRecordsServer struct {
+	grpc.ServerStream
+}
+
+func (x *logProduceBulkRecordsServer) SendAndClose(m *ProduceBulkResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *logProduceBulkRecordsServer) Recv() (*ProduceRequest, error) {
+	m := new(ProduceRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 var _Log_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "Log",
 	HandlerType: (*LogServer)(nil),
@@ -258,6 +323,11 @@ var _Log_serviceDesc = grpc.ServiceDesc{
 			StreamName:    "ProduceStream",
 			Handler:       _Log_ProduceStream_Handler,
 			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "ProduceBulkRecords",
+			Handler:       _Log_ProduceBulkRecords_Handler,
 			ClientStreams: true,
 		},
 	},
