@@ -37,7 +37,11 @@ func setupTest(t *testing.T, fn func(config *Config)) (client api.LogClient, cfg
 
 	// Configure client’s TLS credentials to use the CA as the client’s Root CA
 	// The CA it will use to verify the server as well.
-	clientTLSConfig, err := tlsConfig.SetupTLSConfig(tlsConfig.TLSConfig{CAFile: tlsConfig.CAFile})
+	clientTLSConfig, err := tlsConfig.SetupTLSConfig(tlsConfig.TLSConfig{
+		CAFile:   tlsConfig.CAFile,
+		CertFile: tlsConfig.ClientCertFile,
+		KeyFile:  tlsConfig.ClientKeyFile,
+	})
 	require.NoError(t, err)
 
 	// Tell the client to use those credentials for its connection
@@ -54,6 +58,7 @@ func setupTest(t *testing.T, fn func(config *Config)) (client api.LogClient, cfg
 		KeyFile:       tlsConfig.ServerKeyFile,
 		CAFile:        tlsConfig.CAFile,
 		ServerAddress: l.Addr().String(),
+		Server:        true,
 	})
 	require.NoError(t, err)
 	serverCreds := credentials.NewTLS(serverTLSConfig)
