@@ -22,7 +22,18 @@ cfssl gencert \
                 -ca-key=ca-key.pem \
                 -config=test/ca-config.json \
                 -profile=client \
-                test/client-csr.json | cfssljson -bare client
+                -cn="root" \
+                test/client-csr.json | cfssljson -bare root-client
+
+# another client certificate
+cfssl gencert \
+                -ca=ca.pem \
+                -ca-key=ca-key.pem \
+                -config=test/ca-config.json \
+                -profile=client \
+                -cn="nobody" \
+                test/client-csr.json | cfssljson -bare nobody-client
+
 
 # move the keys to the designated location
 mv *.pem *.csr ${CONFIG_PATH}

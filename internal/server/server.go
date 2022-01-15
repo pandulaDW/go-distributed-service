@@ -2,8 +2,14 @@ package server
 
 import (
 	"context"
+	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpcAuth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	api "github.com/pandulaDW/go-distributed-service/api/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 	"io"
 )
 
@@ -12,9 +18,43 @@ type CommitLog interface {
 	Read(uint64) (*api.Record, error)
 }
 
-type Config struct {
-	CommitLog CommitLog
+type Authorizer interface {
+	Authorize(subject, object, action string) error
 }
+
+func authenticate(ctx context.Context) (context.Context, error) {
+	peerInfo, ok := peer.FromContext(ctx)
+	if !ok {
+		return ctx, status.New(codes.Unknown, "couldn't find peer info").Err()
+	}
+
+	if peerInfo.AuthInfo == nil {
+		return ctx, status.New(codes.Unauthenticated, "no transport security being used").Err()
+	}
+
+	tlsInfo := peerInfo.AuthInfo.(credentials.TLSInfo)
+	subjectName := tlsInfo.State.VerifiedChains[0][0].Subject.CommonName
+	context.WithValue(ctx, subjectContextKey{}, subjectName)
+
+	return ctx, nil
+}
+
+func subject(ctx context.Context) string {
+	return ctx.Value(subjectContextKey{}).(string)
+}
+
+type subjectContextKey struct{}
+
+type Config struct {
+	CommitLog  CommitLog
+	Authorizer Authorizer
+}
+
+const (
+	objectWildcard = "*"
+	produceAction  = "produce"
+	consumeAction  = "consume"
+)
 
 type grpcServer struct {
 	api.UnimplementedLogServer
@@ -24,6 +64,9 @@ type grpcServer struct {
 // NewGRPCServer instantiate the log service, create a gRPC server, and register the
 // service to that server
 func NewGRPCServer(config *Config, opts ...grpc.ServerOption) (*grpc.Server, error) {
+	opts = append(opts, grpc.StreamInterceptor(
+		grpcMiddleware.ChainStreamServer(
+			grpcAuth.StreamServerInterceptor(authenticate))))
 	gsrv := grpc.NewServer(opts...)
 	srv, err := newgrpcServer(config)
 	if err != nil {
