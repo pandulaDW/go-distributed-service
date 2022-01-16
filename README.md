@@ -19,9 +19,7 @@ A distributed commit log library built using Go, protobufs and gRPC. The code wa
     log and produce and consume logs in any desired pattern quickly.
   - A bulk stream request handler to insert large number of records quickly with less network calls.  
 
-## Features of the service
-- The connections are made secure by authenticating the server with SSL/TLS  and by authenticating requests with access tokens.
-- The service has been made observable by adding logs, metrics, and tracing.
-- Server-to-Server service discovery is made by making server instances aware of each other.
-- Consensus is added to coordinate the efforts of the servers and turn them into a cluster.
-- Discovery in the gRPC clients is added so they discover and connect to the servers with client-side load balancing
+## Security
+- A PKI is implemented using the [CFSSL](https://github.com/cloudflare/cfssl) library and its CLI was used to generate test certficates.
+- Connections are encrypted with TLS, through mutual TLS authentication to verify the identities of clients. 
+- Authentication is done using using ACL-based authorization to permit client actions using the [Casbin](https://github.com/casbin/casbin) library.

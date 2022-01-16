@@ -18,33 +18,6 @@ type CommitLog interface {
 	Read(uint64) (*api.Record, error)
 }
 
-type Authorizer interface {
-	Authorize(subject, object, action string) error
-}
-
-func authenticate(ctx context.Context) (context.Context, error) {
-	peerInfo, ok := peer.FromContext(ctx)
-	if !ok {
-		return ctx, status.New(codes.Unknown, "couldn't find peer info").Err()
-	}
-
-	if peerInfo.AuthInfo == nil {
-		return ctx, status.New(codes.Unauthenticated, "no transport security being used").Err()
-	}
-
-	tlsInfo := peerInfo.AuthInfo.(credentials.TLSInfo)
-	subjectName := tlsInfo.State.VerifiedChains[0][0].Subject.CommonName
-	context.WithValue(ctx, subjectContextKey{}, subjectName)
-
-	return ctx, nil
-}
-
-func subject(ctx context.Context) string {
-	return ctx.Value(subjectContextKey{}).(string)
-}
-
-type subjectContextKey struct{}
-
 type Config struct {
 	CommitLog  CommitLog
 	Authorizer Authorizer
@@ -66,7 +39,10 @@ type grpcServer struct {
 func NewGRPCServer(config *Config, opts ...grpc.ServerOption) (*grpc.Server, error) {
 	opts = append(opts, grpc.StreamInterceptor(
 		grpcMiddleware.ChainStreamServer(
-			grpcAuth.StreamServerInterceptor(authenticate))))
+			grpcAuth.StreamServerInterceptor(authenticate),
+		)), grpc.UnaryInterceptor(grpcMiddleware.ChainUnaryServer(
+		grpcAuth.UnaryServerInterceptor(authenticate),
+	)))
 	gsrv := grpc.NewServer(opts...)
 	srv, err := newgrpcServer(config)
 	if err != nil {
@@ -83,7 +59,11 @@ func newgrpcServer(config *Config) (srv *grpcServer, err error) {
 }
 
 // Produce implements the Produce handler
-func (srv *grpcServer) Produce(_ context.Context, req *api.ProduceRequest) (*api.ProduceResponse, error) {
+func (srv *grpcServer) Produce(ctx context.Context, req *api.ProduceRequest) (*api.ProduceResponse, error) {
+	err := srv.Authorizer.Authorize(subject(ctx), objectWildcard, produceAction)
+	if err != nil {
+		return nil, err
+	}
 	off, err := srv.CommitLog.Append(req.Record)
 	if err != nil {
 		return nil, err
@@ -92,7 +72,11 @@ func (srv *grpcServer) Produce(_ context.Context, req *api.ProduceRequest) (*api
 }
 
 // Consume implements the Consume-handler
-func (srv *grpcServer) Consume(_ context.Context, req *api.ConsumeRequest) (*api.ConsumeResponse, error) {
+func (srv *grpcServer) Consume(ctx context.Context, req *api.ConsumeRequest) (*api.ConsumeResponse, error) {
+	err := srv.Authorizer.Authorize(subject(ctx), objectWildcard, consumeAction)
+	if err != nil {
+		return nil, err
+	}
 	record, err := srv.CommitLog.Read(req.Offset)
 	if err != nil {
 		return nil, err
@@ -175,3 +159,31 @@ loop:
 
 	return stream.SendAndClose(&api.ProduceBulkResponse{NumRecordsInserted: insertCount})
 }
+
+type Authorizer interface {
+	Authorize(subject, object, action string) error
+}
+
+// authenticate is an interceptor that reads the subject out of the client’s cert and writes it to the RPC’s context.
+func authenticate(ctx context.Context) (context.Context, error) {
+	peerInfo, ok := peer.FromContext(ctx)
+	if !ok {
+		return ctx, status.New(codes.Unknown, "couldn't find peer info").Err()
+	}
+
+	if peerInfo.AuthInfo == nil {
+		return ctx, status.New(codes.Unauthenticated, "no transport security being used").Err()
+	}
+
+	tlsInfo := peerInfo.AuthInfo.(credentials.TLSInfo)
+	subjectName := tlsInfo.State.VerifiedChains[0][0].Subject.CommonName
+	ctx = context.WithValue(ctx, subjectContextKey{}, subjectName)
+
+	return ctx, nil
+}
+
+func subject(ctx context.Context) string {
+	return ctx.Value(subjectContextKey{}).(string)
+}
+
+type subjectContextKey struct{}

@@ -37,3 +37,6 @@ cfssl gencert \
 
 # move the keys to the designated location
 mv *.pem *.csr ${CONFIG_PATH}
+
+# copy the ACL configuration files to the same config location
+cp test/model.conf test/policy.csv ${CONFIG_PATH}
