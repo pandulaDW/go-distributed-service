@@ -22,4 +22,8 @@ A distributed commit log library built using Go, protobufs and gRPC. The code wa
 ## Security
 - A PKI is implemented using the [CFSSL](https://github.com/cloudflare/cfssl) library and its CLI was used to generate test certficates.
 - Connections are encrypted with TLS, through mutual TLS authentication to verify the identities of clients. 
-- Authentication is done using using ACL-based authorization to permit client actions using the [Casbin](https://github.com/casbin/casbin) library.
+- Authentication is done using ACL-based authorization to permit client actions using the [Casbin](https://github.com/casbin/casbin) library.
+
+## Observability
+- [OpenTelemetry(CNCF)](https://pkg.go.dev/go.opencensus.io) project is used to provide metrics and distributed tracing in the service.
+- Uber’s [Zap](https://pkg.go.dev/go.uber.org/zap) logging library is used for logging as OpenTelemetry doesn't support logging yet.
