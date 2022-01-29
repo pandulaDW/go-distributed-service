@@ -27,3 +27,11 @@ A distributed commit log library built using Go, protobufs and gRPC. The code wa
 ## Observability
 - [OpenTelemetry(CNCF)](https://pkg.go.dev/go.opencensus.io) project is used to provide metrics and distributed tracing in the service.
 - Uber’s [Zap](https://pkg.go.dev/go.uber.org/zap) logging library is used for logging as OpenTelemetry doesn't support logging yet.
+
+# Distributing the service
+
+## Service discovery
+- Service discovery is embedded into the Logger and not as a separate component, unlike Kafka.
+- [Hashicorp's Serf](https://github.com/hashicorp/serf) is used for handling service discovery. Serf maintains cluster membership by using an efficient, 
+lightweight gossip protocol to communicate between the service’s nodes. Unlike service registry projects like ZooKeeper and Consul, 
+Serf doesn't have a central-registry architectural style.

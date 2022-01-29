@@ -30,6 +30,19 @@ type Membership struct {
 	logger  *zap.Logger
 }
 
+// New creates a Membership with the required configuration and the event handler
+func New(handler Handler, config Config) (*Membership, error) {
+	c := &Membership{
+		Config:  config,
+		handler: handler,
+		logger:  zap.L().Named("membership"),
+	}
+	if err := c.setupSerf(); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
 // setupSerf() creates and configures a Serf instance and starts the eventsHandler()
 // goroutine to handle Serf’s events.
 func (m *Membership) setupSerf() (err error) {
@@ -48,12 +61,16 @@ func (m *Membership) setupSerf() (err error) {
 	config.Tags = m.Tags
 	config.NodeName = m.Config.NodeName
 
+	// create serf instance
 	m.serf, err = serf.Create(config)
 	if err != nil {
 		return err
 	}
 
+	// event handler to run custom logic when an event fires
 	go m.eventHandler()
+
+	// join cluster, if not the initial member
 	if m.StartJoinAddrs != nil {
 		_, err = m.serf.Join(m.StartJoinAddrs, true)
 		if err != nil {
@@ -77,7 +94,7 @@ func (m *Membership) eventHandler() {
 				}
 				m.handleJoin(member)
 			}
-		case serf.EventMemberFailed:
+		case serf.EventMemberLeave:
 			for _, member := range e.(serf.MemberEvent).Members {
 				if m.isLocal(member) {
 					return
