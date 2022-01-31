@@ -70,10 +70,6 @@ func setupTest(t *testing.T) (*Replicator, string, func()) {
 	require.NoError(t, err)
 	clientForSecondary := api.NewLogClient(secondaryClientConn)
 
-	_, err = clientForSecondary.Produce(ctx,
-		&api.ProduceRequest{Record: &api.Record{Value: []byte("something")}},
-	)
-
 	// setup replicator with the secondary client and the primary client dial options
 	r := Replicator{}
 	r.DialOptions = primaryClientOpts
