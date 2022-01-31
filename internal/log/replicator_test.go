@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"os"
 	"testing"
@@ -20,7 +21,9 @@ import (
 
 func TestReplicator(t *testing.T) {
 	for scenario, fn := range map[string]func(t *testing.T, r *Replicator, primaryAddr string){
-		"replicates the log successfully": testReplicatorJoin,
+		"replicates the logs from a primary server":  testReplicatorJoin,
+		"replicator leaves the service successfully": testReplicatorLeave,
+		"replicator closes the service successfully": testReplicatorClose,
 	} {
 		t.Run(scenario, func(t *testing.T) {
 			r, primaryAddr, tearDownFn := setupTest(t)
@@ -38,14 +41,14 @@ func setupTest(t *testing.T) (*Replicator, string, func()) {
 	// create the primary server and its tcp listener
 	lPrimary, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", ports[0]))
 	require.NoError(t, err)
-	primary, dirPrimary := setupServer(t, lPrimary.Addr().String(), 1)
+	primary, dirPrimary := setupServer(t)
 	go func() {
 		_ = primary.Serve(lPrimary)
 	}()
 
 	// create a client to call the primary server
-	primaryClientOpts := setupClientOpts(t, lPrimary)
-	primaryClientConn, err := grpc.Dial(lPrimary.Addr().String(), primaryClientOpts...)
+	clientOpts := setupClientOpts(t)
+	primaryClientConn, err := grpc.Dial(lPrimary.Addr().String(), clientOpts...)
 	require.NoError(t, err)
 	clientForPrimary := api.NewLogClient(primaryClientConn)
 
@@ -59,20 +62,20 @@ func setupTest(t *testing.T) (*Replicator, string, func()) {
 	// create the secondary server and its tcp listener
 	lSecondary, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", ports[1]))
 	require.NoError(t, err)
-	secondary, dirSecondary := setupServer(t, lSecondary.Addr().String(), 2)
+	secondary, dirSecondary := setupServer(t)
 	go func() {
 		_ = secondary.Serve(lSecondary)
 	}()
 
 	// create a client for the secondary
-	secondaryClientOpts := setupClientOpts(t, lSecondary)
-	secondaryClientConn, err := grpc.Dial(lSecondary.Addr().String(), secondaryClientOpts...)
+	clientOpts = setupClientOpts(t)
+	secondaryClientConn, err := grpc.Dial(lSecondary.Addr().String(), clientOpts...)
 	require.NoError(t, err)
 	clientForSecondary := api.NewLogClient(secondaryClientConn)
 
 	// setup replicator with the secondary client and the primary client dial options
 	r := Replicator{}
-	r.DialOptions = primaryClientOpts
+	r.DialOptions = clientOpts
 	r.LocalServer = clientForSecondary
 
 	// teardown function
@@ -96,30 +99,52 @@ func testReplicatorJoin(t *testing.T, r *Replicator, primaryAddr string) {
 	require.NoError(t, err)
 
 	// wait until the replication finishes since the replication process is asynchronous
-	time.Sleep(time.Second * 2)
+	time.Sleep(2 * time.Second)
 
 	for i := 0; i < 3; i++ {
 		res, err := r.LocalServer.Consume(ctx, &api.ConsumeRequest{Offset: uint64(i)})
 		require.NoError(t, err)
-		fmt.Println(res)
+		require.Equal(t, res.Record.Value, []byte(fmt.Sprintf("hello, world %d", i+1)))
 	}
 }
 
-func setupServer(t *testing.T, addr string, index int) (*grpc.Server, string) {
+func testReplicatorLeave(t *testing.T, r *Replicator, primaryAddr string) {
+	err := r.Join("primary", primaryAddr)
+	require.NoError(t, err)
+
+	err = r.Leave("primary")
+	require.NoError(t, err)
+
+	require.Empty(t, r.servers)
+}
+
+func testReplicatorClose(t *testing.T, r *Replicator, primaryAddr string) {
+	err := r.Join("primary", primaryAddr)
+	require.NoError(t, err)
+
+	err = r.Close()
+	require.NoError(t, err)
+
+	require.True(t, r.closed)
+	_, isOpen := <-r.close
+	require.False(t, isOpen)
+}
+
+func setupServer(t *testing.T) (*grpc.Server, string) {
 	t.Helper()
 	// setup grpcServer creds
 	serverTlsConfig, err := tlsConfig.SetupTLSConfig(tlsConfig.TLSConfig{
 		CertFile:      tlsConfig.ServerCertFile,
 		KeyFile:       tlsConfig.ServerKeyFile,
 		CAFile:        tlsConfig.CAFile,
-		ServerAddress: addr,
+		ServerAddress: "127.0.0.1",
 		Server:        true,
 	})
 	require.NoError(t, err)
 	tlsCreds := credentials.NewTLS(serverTlsConfig)
 
 	// setup logger and authorizer
-	dir, err := ioutil.TempDir("", fmt.Sprintf("replication-%d", index))
+	dir, err := ioutil.TempDir("", fmt.Sprintf("replication-%d", rand.Int()))
 	require.NoError(t, err)
 
 	cLog, err := NewLog(dir, Config{})
@@ -134,14 +159,14 @@ func setupServer(t *testing.T, addr string, index int) (*grpc.Server, string) {
 	return grpcServer, dir
 }
 
-func setupClientOpts(t *testing.T, l net.Listener) []grpc.DialOption {
+func setupClientOpts(t *testing.T) []grpc.DialOption {
 	t.Helper()
 	// setup client tls config
 	clientTlsConfig, err := tlsConfig.SetupTLSConfig(tlsConfig.TLSConfig{
 		CertFile:      tlsConfig.RootClientCertFile,
 		KeyFile:       tlsConfig.RootClientKeyFile,
 		CAFile:        tlsConfig.CAFile,
-		ServerAddress: l.Addr().String(),
+		ServerAddress: "127.0.0.1",
 		Server:        false,
 	})
 	require.NoError(t, err)
